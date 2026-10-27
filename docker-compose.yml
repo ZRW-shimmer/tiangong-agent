@@ -1,6 +1,6 @@
 # ============================================================
 # 天宫医疗智能体 (tiangong-agent) — 基础设施层
-# 包含：PostgreSQL / Redis / Milvus / Neo4j
+# 包含：PostgreSQL / Redis / MinIO / Milvus / Neo4j
 # 启动：docker compose up -d
 # 停止：docker compose down
 # 清数据：docker compose down -v
@@ -59,6 +59,32 @@ services:
       retries: 5
 
   # ----------------------------------------------------------
+  # MinIO — 对象存储（存知识库文档等文件）
+  # 说明：Milvus 已改为本地存储，不再依赖它；这里仅供应用的文件上传/下载使用
+  # Web 控制台：http://localhost:9001  账号/密码：minioadmin/minioadmin
+  # ----------------------------------------------------------
+  minio:
+    image: quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z
+    container_name: tiangong-minio
+    restart: always
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: minio server /minio_data --console-address ":9001"
+    volumes:
+      - ./docker/minio_data:/minio_data
+    ports:
+      - "9000:9000"   # S3 API 接口（SDK 连接）
+      - "9001:9001"   # Web 控制台
+    networks:
+      - tiangong-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # ----------------------------------------------------------
   # Milvus 依赖：etcd — 元数据存储
   # ----------------------------------------------------------
   etcd:
@@ -80,30 +106,6 @@ services:
       - tiangong-net
 
   # ----------------------------------------------------------
-  # Milvus 依赖：MinIO — 对象存储（存向量数据文件）
-  # ----------------------------------------------------------
-  minio:
-    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
-    container_name: tiangong-minio
-    restart: always
-    environment:
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-    command: minio server /minio_data --console-address ":9001"
-    volumes:
-      - ./docker/minio_data:/minio_data
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    networks:
-      - tiangong-net
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 20s
-      retries: 3
-
-  # ----------------------------------------------------------
   # Milvus — 向量数据库 
   # 存储：文档 Embedding（RAG 语义检索）、患者历史长期记忆
   # ----------------------------------------------------------
@@ -115,16 +117,16 @@ services:
     - seccomp:unconfined
     environment:
       ETCD_ENDPOINTS: etcd:2379
-      MINIO_ADDRESS: minio:9000
+      COMMON_STORAGETYPE: local
       MQ_TYPE: woodpecker
     volumes:
       - ./docker/milvus_data:/var/lib/milvus
+      - ./user.yaml:/milvus/configs/user.yaml
     ports:
       - "19530:19530"   # gRPC 接口（SDK 连接）
       - "9091:9091"     # HTTP 接口（健康检查）
     depends_on:
       - etcd
-      - minio
     networks:
       - tiangong-net
     healthcheck:

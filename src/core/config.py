@@ -61,3 +61,14 @@ class Settings(BaseSettings):
 @lru_cache  # lru 把对象实例保存到内存中。这是一种单例的实现
 def get_settings() -> Settings:
     return Settings()
+
+
+def get_llm(temperature: float = 0.1):
+    from langchain_deepseek import ChatDeepSeek
+    settings = get_settings()
+    return ChatDeepSeek(
+        model=settings.CHAT_MODEL,  # "deepseek-chat"
+        api_key=settings.DEEPSEEK_API_KEY,  # 从 .env 读
+        temperature=temperature,
+    )
+

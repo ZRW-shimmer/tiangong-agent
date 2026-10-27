@@ -1,0 +1,7 @@
+# Milvus 本地存储配置
+# 去掉 MinIO 依赖后，Woodpecker 消息队列（2.6 默认 MQ）也改用本地磁盘存 WAL，
+# 数据落在 /var/lib/milvus/woodpecker（即宿主机 ./docker/milvus_data/woodpecker）
+woodpecker:
+  storage:
+    type: local
+    rootPath: /var/lib/milvus/woodpecker

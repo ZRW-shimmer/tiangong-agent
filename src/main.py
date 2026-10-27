@@ -13,6 +13,7 @@ from src.infra.neo4j_client import (
     close_neo4j_driver,
     get_neo4j_driver,
 )
+from src.api.routers.chat import router as chat_router
 from src.core.config import get_settings
 from src.middlewares.logging import LoggingMiddleware
 from src.core.exceptions import register_exception_handlers
@@ -83,7 +84,7 @@ def create_app() -> FastAPI:
 
     # 注册路由
     # app.include_router(user_router, prefix="/api/v1")
-
+    app.include_router(chat_router)
 
     return app
 
