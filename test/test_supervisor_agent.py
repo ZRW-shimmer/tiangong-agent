@@ -2,7 +2,7 @@ import uuid
 
 import pytest
 
-from agents.supervisor_agent import chat_endpoint
+from src.agents.supervisor_agent import chat_endpoint
 
 # @pytest.mark.asyncio
 async def test_supervisor_agent():

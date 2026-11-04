@@ -1,8 +1,7 @@
 from dataclasses import dataclass
-
+from typing import Any
 from langchain_core.tools import tool
 from langgraph.prebuilt import ToolRuntime
-
 from src.agents.inquiry.graph import build_inquiry_deps, run_inquiry
 from src.agents.inquiry.state import InquiryPhase
 from src.core.config import get_settings
@@ -19,7 +18,8 @@ settings=get_settings()
 class UserContext:  # 用户上下文
     user_id: str
     session_id: str
-
+    db_session: Any= None
+    role: str = "patient"
 # 仅第一轮会发起调用
 @tool
 async def call_inquiry_agent(message: str,runtime:ToolRuntime[UserContext] ) -> str:
@@ -82,46 +82,61 @@ async def call_report_agent(message: str) -> str:
 
 
 @tool
-async def call_drug_agent(message: str) -> str:
+async def call_drug_agent(
+    message: str,
+    runtime: ToolRuntime[UserContext],
+) -> str:
     """
     调用药物Agent，进行药物推荐、药物交互检测或处方审查。
     适用场景：询问用什么药、多种药物能否同服、处方是否安全时。
     message: 患者的用药问题或处方信息。
     """
-    agent = get_drug_agent()
+    ctx = runtime.context
+    agent = get_drug_agent(user_id=ctx.user_id, role=ctx.role)
     result = await agent.ainvoke(
         {"messages": [{"role": "user", "content": message}]}
     )
     return result["messages"][-1].content
 
-
 @tool
-async def call_knowledge_agent(message: str) -> str:
+async def call_knowledge_agent(
+    message: str,
+    runtime: ToolRuntime[UserContext],
+) -> str:
     """
     调用知识问答Agent，回答医学知识类问题。
     适用场景：询问疾病知识、治疗方案、医学术语解释、文献检索时。
     message: 患者或医生的医学知识问题。
     """
-    agent = get_knowledge_agent()
+    ctx = runtime.context
+    agent = get_knowledge_agent(
+        db_session=ctx.db_session,
+        user_id=ctx.user_id,
+        role=ctx.role,
+    )
     result = await agent.ainvoke(
         {"messages": [{"role": "user", "content": message}]}
     )
     return result["messages"][-1].content
 
-
 @tool
-async def call_operation_agent(message: str) -> str:
+async def call_operation_agent(
+    message: str,
+    runtime: ToolRuntime[UserContext],
+) -> str:
     """
     调用运营数据Agent，查询医院运营统计数据。
     适用场景：运营人员询问就诊量、收入、科室排名等运营数据时。
     message: 运营人员的数据查询需求（自然语言）。
     """
-    agent = get_operation_agent()
+    ctx = runtime.context
+    if ctx.db_session is None:
+        return "数据库连接不可用，无法执行运营数据查询。"
+    agent = get_operation_agent(db_session=ctx.db_session)
     result = await agent.ainvoke(
         {"messages": [{"role": "user", "content": message}]}
     )
     return result["messages"][-1].content
-
 
 # 所有 Worker 工具列表，供 Supervisor 使用
 WORKER_TOOLS = [

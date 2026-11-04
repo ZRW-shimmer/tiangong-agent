@@ -42,10 +42,25 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: str = ""
     CHAT_MODEL: str = "deepseek-chat"
     EMBEDDING_MODEL: str = "text-embedding-v3"
+    # Embedding 后端：local=本地 BGE，dashscope=阿里云
+    EMBEDDING_BACKEND: str = "dashscope"
+    LOCAL_EMBEDDING_MODEL: str = "models/bge-large-zh-v1.5"
+    LOCAL_EMBEDDING_DEVICE: str = "cpu"
+    LOCAL_EMBEDDING_BATCH_SIZE: int = 16
     VL_MODEL: str = "qwen-vl"
 
     LOG_LEVEL: str = "DEBUG"
     LOG_DIR: str = "logs"
+
+
+    # MinerU 云端解析（mineru.net 精准解析 API v4）
+    MINERU_API_BASE: str = "https://mineru.net"
+    MINERU_API_TOKEN: str = ""
+    MINERU_MODEL_VERSION: str = "vlm"   # vlm / pipeline / MinerU-HTML
+    MINERU_LANGUAGE: str = "ch"
+    MINERU_POLL_INTERVAL: int = 5       # 轮询间隔，秒
+    MINERU_POLL_TIMEOUT: int = 900      # 总等待时间，秒
+    MINERU_REQUEST_TIMEOUT: int = 120   # 单次 HTTP 超时，秒
 
     @property
     def DATABASE_URL(self) -> str:

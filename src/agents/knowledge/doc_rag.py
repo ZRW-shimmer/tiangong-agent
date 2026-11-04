@@ -1,8 +1,10 @@
+import asyncio
+
 from langchain_core.messages import SystemMessage
 from loguru import logger
 from pymilvus import MilvusClient
 from langchain_core.language_models import BaseChatModel
-from openai.types import Embedding
+from langchain_core.embeddings import Embeddings
 
 from src.agents.knowledge.prompts import DOC_QA_PROMPT
 
@@ -12,7 +14,7 @@ COLLECTION_NAME="knowledge_docs"
 async def search_docs_raw(
         question:str,
         milvus_client: MilvusClient,
-        embedding_model=Embedding,
+        embedding_model:Embeddings,
         top_k:int=20,
         rerank_top_k:int=5,
         doc_type:str | None=None,
@@ -25,22 +27,24 @@ async def search_docs_raw(
     """
     if use_hyde and llm is not None:
         from src.agents.knowledge.hyde import generate_hyde_embedding
-        query_vec=await generate_hyde_embedding(question,llm,milvus_client)
+        query_vec=await generate_hyde_embedding(question,llm,embedding_model)
     else:
         query_vec=await embedding_model.aembed_query(question)
 
     search_params = {"metric_type":"COSINE","params":{"nprobe":16}}
-    filter_expr=f'doc_type=={doc_type}' if doc_type else None
+    search_kwargs = {
+        "collection_name": COLLECTION_NAME,
+        "data": [query_vec],
+        "limit": top_k,
+        "output_fields": ["doc_name", "doc_type", "page_number", "chunk_index", "text"],
+        "search_params": search_params,
+    }
+    if doc_type:
+        search_kwargs["filter"] = f'doc_type == "{doc_type}"'
 
     try:
-        results=await milvus_client.search(
-            collection_name=COLLECTION_NAME,
-            data=[query_vec],
-            limit=top_k,
-            output_fields=["doc_name","doc_type","page_number","chunk_index","text"],
-            search_params=search_params,
-            filter=filter_expr
-        )
+        # pymilvus 的 MilvusClient.search 是同步方法，不能直接 await
+        results = await asyncio.to_thread(milvus_client.search, **search_kwargs)
     except Exception as e:
         logger.warning(f"文档检索失败: {e}")
         return []

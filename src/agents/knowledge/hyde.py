@@ -1,9 +1,9 @@
-from docutils.utils import SystemMessage
+from langchain_core.messages import SystemMessage
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 from loguru import logger
 
-from agents.knowledge.prompts import HYDE_PROMPT
+from src.agents.knowledge.prompts import HYDE_PROMPT
 
 
 async def generate_hyde_embedding(
@@ -19,8 +19,8 @@ async def generate_hyde_embedding(
     """
     prompt=HYDE_PROMPT.format(question=question)
     try:
-        response=llm.ainvoke([SystemMessage(content=prompt)])
-        hypothetical_doc=response.cotent.strip()
+        response=await llm.ainvoke([SystemMessage(content=prompt)])
+        hypothetical_doc=response.content.strip()
         logger.debug(f"HyDE 假设文档: {hypothetical_doc[:100]}...")
         return await embedding_model.aembed_query(hypothetical_doc)
     except Exception as e:

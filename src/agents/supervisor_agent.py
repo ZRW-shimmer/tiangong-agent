@@ -3,7 +3,7 @@ from langgraph.checkpoint.redis import AsyncRedisSaver
 from langchain.agents import create_agent
 
 from src.agents.tools.store_tools import save_memory, search_memory
-from src.agents.tools.worker_tools import WORKER_TOOLS
+from src.agents.tools.worker_tools import WORKER_TOOLS,UserContext
 from src.infra.milvus_client import get_milvus_client_alias
 from src.infra.milvus_store import MilvusStore
 from src.infra.redis_cache import get_checkpointer_redis
@@ -12,18 +12,10 @@ load_dotenv()
 
 
 def _get_embedding_model():
-    """返回向量化模型。根据你的实际情况替换。"""
-    # 方案A：使用 DashScope（阿里云）: 环境变量需要配置 DASHSCOPE_API_KEY
-    from langchain_community.embeddings import DashScopeEmbeddings
-    return DashScopeEmbeddings(model="text-embedding-v3")
+    """返回项目统一的向量化模型（默认本地 BGE）。"""
+    from src.infra.embedding import get_embedding_model
 
-    # 方案B：使用 Ollama 本地模型
-    # from langchain_ollama import OllamaEmbeddings
-    # return OllamaEmbeddings(model="nomic-embed-text")
-
-    # 方案C：使用 OpenAI
-    # from langchain_openai import OpenAIEmbeddings
-    # return OpenAIEmbeddings(model="text-embedding-3-small")
+    return get_embedding_model()
 
 
 SUPERVISOR_SYSTEM_PROMPT = """你是天宫医疗的智能总助手。
@@ -90,9 +82,8 @@ async def create_supervisor_agent():
     )
 
     # 4. 长期记忆工具
-    tools = tools = [save_memory, search_memory] + WORKER_TOOLS
+    tools = [save_memory, search_memory] + WORKER_TOOLS
 
-    from src.agents.tools.worker_tools import UserContext
     # 4. 创建 Agent
     agent = create_agent(
         model="deepseek-chat",
@@ -104,10 +95,10 @@ async def create_supervisor_agent():
                 model="deepseek-chat",
                 trigger=[
                     ("tokens", 4000),  # token数达到4k时触发
-                    ("messages", 6),  # 或消息数达到 4条时触发
+                    ("messages", 20),  # 或消息数达到 20条时触发
                     # ("fraction", 0.8)  # 或80%消息时触发
                 ],
-                keep=("messages", 6),  # 摘要后保留最近 4 条消息
+                keep=("messages", 10),  # 摘要后保留最近 10 条消息
             )
         ],
         checkpointer=checkpointer, # 短期记忆. agent chat ui（禁用你配置 checkpointer）
@@ -139,5 +130,6 @@ async def chat_endpoint(user_id: str, session_id: str, message: str):
     result = await agent.ainvoke(
         {"messages": [{"role": "user", "content": message}]},
         config=config,
+        context=UserContext(user_id=user_id, session_id=session_id),
     )
     return result["messages"][-1].content

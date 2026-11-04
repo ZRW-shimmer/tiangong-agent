@@ -13,7 +13,7 @@ MAX_CYPHER_RETRIES=2
 
 async def _extract_entities(question:str,llm:BaseChatModel) -> dict:
     prompt=ENTITY_EXTRACT_PROMPT.format(question=question)
-    response=await llm.ainvoke([SystemMessage(contnet=prompt)])
+    response=await llm.ainvoke([SystemMessage(content=prompt)])
     try:
         content = response.content.strip()
         if "```" in content:
@@ -26,6 +26,7 @@ async def _extract_entities(question:str,llm:BaseChatModel) -> dict:
 async def _generate_cypher(
     question: str, entities: dict, llm: BaseChatModel, error_hint: str = "",
 ) -> str:
+    extra = ""
     if error_hint:
         extra = f"\n\n上一次生成的 Cypher 执行报错：{error_hint}\n请修正后重新生成。"
     prompt = NL2CYPHER_PROMPT.format(

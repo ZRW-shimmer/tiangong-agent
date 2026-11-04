@@ -10,8 +10,6 @@ import asyncio
 import sys
 import os
 
-from langchain_community.embeddings import DashScopeEmbeddings
-
 # 把项目根目录加入 Python 路径，确保能 import src 下的模块
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -21,6 +19,7 @@ from pymilvus import (
 )
 from neo4j import AsyncGraphDatabase
 from src.core.config import get_settings
+from src.infra.embedding import get_embedding_model as build_embedding_model
 
 settings = get_settings()
 
@@ -72,14 +71,8 @@ async def fetch_all_symptoms(neo4j_driver) -> list[str]:
 
 
 def get_embedding_model():
-    """
-    返回 Embedding 模型实例。
-    项目使用 DeepSeek 兼容的 OpenAI 接口 + text-embedding-v3。
-    """
-    return DashScopeEmbeddings(
-        model=settings.EMBEDDING_MODEL,
-        dashscope_api_key=settings.DASHSCOPE_API_KEY,
-    )
+    """返回项目统一的 Embedding 模型（默认本地 BGE）。"""
+    return build_embedding_model()
 
 
 async def build_symptom_index():

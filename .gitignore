@@ -138,3 +138,7 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+
+# 本地公共数据集缓存
+data/raw/CMIRB/
+data/raw/drug_instructions_sample20/

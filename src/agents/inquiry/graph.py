@@ -6,7 +6,7 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_deepseek import ChatDeepSeek
-from langchain_community.embeddings import DashScopeEmbeddings
+from src.infra.embedding import get_embedding_model
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
 from pymilvus import MilvusClient
@@ -569,10 +569,7 @@ def build_inquiry_deps(db_session: AsyncSession | None = None) -> InquiryDeps:
         api_key=settings.DEEPSEEK_API_KEY,
         temperature=0.3,
     )
-    embedding_model = DashScopeEmbeddings(
-        model=settings.EMBEDDING_MODEL,
-        dashscope_api_key=settings.DASHSCOPE_API_KEY,
-    )
+    embedding_model = get_embedding_model()
     neo4j_driver = get_neo4j_driver()
     get_milvus_client_alias()  # 确保连接已建立
     milvus_client = MilvusClient(

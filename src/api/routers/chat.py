@@ -101,7 +101,11 @@ async def chat(
         result = await agent.ainvoke(
             {"messages": [{"role": "user", "content": req.message}]},
             config=config,
-            context=UserContext(user_id=req.user_id, session_id=req.session_id),
+            context=UserContext(
+                user_id=req.user_id,
+                session_id=req.session_id,
+                db_session=db,
+            ),
         )
         reply = result["messages"][-1].content
         return ChatResponse(reply=reply, session_id=req.session_id)
@@ -145,9 +149,14 @@ async def chat_stream(
                 agent = await get_supervisor_agent()
                 config = {"configurable": {"thread_id": thread_id}}
                 async for chunk in agent.astream(
-                    {"messages": [{"role": "user", "content": req.message}]},
-                    config=config,
-                    stream_mode="messages",
+                        {"messages": [{"role": "user", "content": req.message}]},
+                        config=config,
+                        context=UserContext(
+                            user_id=req.user_id,
+                            session_id=req.session_id,
+                            db_session=db,
+                        ),
+                        stream_mode="messages",
                 ):
                     if isinstance(chunk, tuple):
                         msg_chunk, _ = chunk
