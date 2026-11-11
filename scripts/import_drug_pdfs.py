@@ -22,6 +22,7 @@ import hashlib
 import json
 import os
 import sys
+import re
 from pathlib import Path
 
 from loguru import logger
@@ -48,6 +49,22 @@ EMBED_BATCH_SIZE = 10
 WRITE_BATCH_SIZE = 200
 MAX_CHUNK_CHARS = 800
 CHUNK_OVERLAP = 100
+
+# 对问答检索价值低、且容易造成“短块高分噪声”的章节
+SKIP_SECTIONS = {
+    "【说明书修订日期】",
+    "【药品名称】",
+    "【英文名称】",
+    "【汉语拼音】",
+    "【规格】",
+    "【贮藏】",
+    "【包装】",
+    "【有效期】",
+    "【执行标准】",
+    "【批准文号】",
+    "【药品上市许可持有人】",
+}
+
 
 
 def _normalize_pdf_text(text: str) -> str:
@@ -218,25 +235,68 @@ def _records_for_pdf(
     records: list[dict] = []
     global_index = 0
 
+    # PDF 的章节经常跨页：上一页以【用法用量】开头，
+    # 下一页直接接着正文，没有标题。这里把这种【正文】接回上一节。
+    sections: list[dict] = []
+    current_title = ""
+    current_page = 0
+    current_parts: list[str] = []
+
+    def flush_section() -> None:
+        nonlocal current_parts
+        if not current_parts:
+            return
+        body = " ".join(current_parts).strip()
+        if body:
+            sections.append(
+                {
+                    "title": current_title or "【正文】",
+                    "body": body,
+                    "page": current_page,
+                }
+            )
+        current_parts = []
+
     for page_number, page in enumerate(reader.pages, 1):
         page_text = _normalize_pdf_text(page.extract_text() or "")
         if len(page_text) < 20:
             continue
 
-        body = "\n".join(header) + f"\n\n【第{page_number}页】\n" + page_text
-        for chunk in _split_text(body):
-            records.append(
-                {
-                    "id": f"{doc_id}_{global_index}",
-                    "doc_id": doc_id,
-                    "doc_name": drug_name[:200],
-                    "doc_type": DOC_TYPE,
-                    "category": "药品说明书样本20份 (Apache-2.0)",
-                    "page_number": page_number,
-                    "chunk_index": global_index,
-                    "text": chunk[:65000],
-                }
+        for section_title, section_body in _split_by_sections(page_text):
+            # 没有标题的块，视为上一章节的跨页续写
+            if section_title == "【正文】" and current_title:
+                current_parts.append(section_body)
+                continue
+
+            flush_section()
+            current_title = section_title
+            current_page = page_number
+            current_parts = [section_body]
+
+    flush_section()
+
+    for section in sections:
+        title = section["title"]
+        body = section["body"]
+        if title in SKIP_SECTIONS or len(body) < 10:
+            continue
+
+        for piece in _split_text(body):
+            chunk_text = (
+                f"【药品名称】{drug_name}\n"
+                f"{title}\n"
+                f"{piece}"
             )
+            records.append({
+                "id": f"{doc_id}_{global_index}",
+                "doc_id": doc_id,
+                "doc_name": drug_name[:200],
+                "doc_type": DOC_TYPE,
+                "category": "药品说明书样本20份 (Apache-2.0)",
+                "page_number": section["page"],
+                "chunk_index": global_index,
+                "text": chunk_text[:65000],
+            })
             global_index += 1
 
     return doc_id, drug_name, records
@@ -330,6 +390,27 @@ async def main() -> None:
         "(Apache-2.0，仅用于测试)"
     )
 
+
+
+def _split_by_sections(text: str) -> list[tuple[str, str]]:
+    """把 _normalize_pdf_text 的输出按【章节】拆开。"""
+    result = []
+    for block in text.split("\n\n"):
+        block = block.strip()
+        if not block:
+            continue
+
+        match = re.match(r"【([^】]+)】", block)
+        if match and not re.fullmatch(r"第\d+页", match.group(1)):
+            title = match.group(0)
+            body = block[match.end():].strip()
+        else:
+            title = "【正文】"
+            body = block
+
+        if body:
+            result.append((title, body))
+    return result
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -20,10 +20,12 @@ async def search_docs_raw(
         doc_type:str | None=None,
         llm:BaseChatModel |None=None,
         use_hyde:bool=False,
+        use_rerank:bool=True,
+        collection_name:str=COLLECTION_NAME,
 ) ->list[dict]:
     """
     文档向量检索，返回原始检索结果列表。
-    支持 HyDE 增强检索和 Reranker 精排。
+    支持 HyDE 增强检索和 Reranker 精排，可通过 collection_name 指定评估集合。
     """
     if use_hyde and llm is not None:
         from src.agents.knowledge.hyde import generate_hyde_embedding
@@ -33,10 +35,10 @@ async def search_docs_raw(
 
     search_params = {"metric_type":"COSINE","params":{"nprobe":16}}
     search_kwargs = {
-        "collection_name": COLLECTION_NAME,
+        "collection_name": collection_name,
         "data": [query_vec],
         "limit": top_k,
-        "output_fields": ["doc_name", "doc_type", "page_number", "chunk_index", "text"],
+        "output_fields": ["id", "doc_name", "doc_type", "page_number", "chunk_index", "text"],
         "search_params": search_params,
     }
     if doc_type:
@@ -55,6 +57,9 @@ async def search_docs_raw(
         for hit in results[0]
     ]
 
+    if not use_rerank:
+        return hits[:rerank_top_k]
+
     from src.agents.knowledge.reranker import rerank_docs
     reranked = await rerank_docs(question, hits, top_k=rerank_top_k)
     return reranked
@@ -72,9 +77,24 @@ def format_doc_context(hits:list[dict]) -> str:
         parts.append(f"片段{i} {source}:\n{hit['text']}")
     return "\n\n---\n\n".join(parts)
 
+async def generate_doc_answer(
+        question:str,
+        hits:list[dict],
+        llm:BaseChatModel,
+        role:str="patient",
+) -> str:
+    """基于检索结果生成文档问答回答。检索与生成分离，便于评估复用。"""
+    if not hits:
+        return "当前知识库中未找到与您问题相关的文档内容。"
+    context = format_doc_context(hits)
+    prompt = DOC_QA_PROMPT.format(question=question, context=context, role=role)
+    response = await llm.ainvoke([SystemMessage(content=prompt)])
+    return response.content
+
+
 async def search_docs(
         question:str,
-        embedding_model:BaseChatModel,
+        embedding_model:Embeddings,
         milvus_client: MilvusClient,
         llm:BaseChatModel,
         top_k:int=20,
@@ -82,6 +102,8 @@ async def search_docs(
         doc_type:str | None=None,
         role:str="patient",
         use_hyde:bool=True,
+        use_rerank:bool=True,
+        collection_name:str=COLLECTION_NAME,
 ) -> str:
     """文档 RAG 检索 + Reranker 精排 + HyDE 增强 + 生成回答。"""
     hits=await search_docs_raw(
@@ -93,10 +115,7 @@ async def search_docs(
         doc_type=doc_type,
         llm=llm,
         use_hyde=use_hyde,
+        use_rerank=use_rerank,
+        collection_name=collection_name,
     )
-    if not hits:
-        return "当前知识库中未找到与您问题相关的文档内容。"
-    context = format_doc_context(hits)
-    prompt = DOC_QA_PROMPT.format(question=question, context=context, role=role)
-    response = await llm.ainvoke([SystemMessage(content=prompt)])
-    return response.content
+    return await generate_doc_answer(question, hits, llm, role=role)

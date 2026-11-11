@@ -52,6 +52,11 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "DEBUG"
     LOG_DIR: str = "logs"
 
+    # RAG 评估（TruLens）
+    TRULENS_DB_NAME: str = "trulens_eval"
+    # LiteLLM 模型名：deepseek/deepseek-chat 表示走 DeepSeek 官方 API
+    EVAL_JUDGE_MODEL: str = "deepseek/deepseek-chat"
+
 
     # MinerU 云端解析（mineru.net 精准解析 API v4）
     MINERU_API_BASE: str = "https://mineru.net"
@@ -68,6 +73,20 @@ class Settings(BaseSettings):
             f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}"
             f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
         )
+
+    @property
+    def TRULENS_DATABASE_URL(self) -> str:
+        """TruLens 评估库连接串（与业务库隔离）。"""
+        from sqlalchemy.engine import URL
+
+        return URL.create(
+            drivername="postgresql",
+            username=self.DB_USER,
+            password=self.DB_PASSWORD,
+            host=self.DB_HOST,
+            port=self.DB_PORT,
+            database=self.TRULENS_DB_NAME,
+        ).render_as_string(hide_password=False)
 
     # 指定环境变量文件
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}

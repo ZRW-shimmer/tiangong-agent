@@ -142,3 +142,7 @@ cython_debug/
 # 本地公共数据集缓存
 data/raw/CMIRB/
 data/raw/drug_instructions_sample20/
+
+# 本地 RAG 评估数据与结果（可由脚本重新生成）
+data/eval/*.json
+data/eval/runs/
